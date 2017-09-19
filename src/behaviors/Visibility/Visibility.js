@@ -181,11 +181,11 @@ export default class Visibility extends Component {
     offScreen: false,
   }
 
-  firedCallbacks = []
+  occuredCallbacks = []
 
   componentWillReceiveProps({ continuous, once }) {
     const cleanOut = continuous !== this.props.continuous || once !== this.props.once
-    if (cleanOut) this.firedCallbacks = []
+    if (cleanOut) this.occuredCallbacks = []
   }
 
   componentDidMount() {
@@ -193,6 +193,7 @@ export default class Visibility extends Component {
 
     const { context, fireOnMount } = this.props
 
+    context.addEventListener('resize', this.handleScroll)
     context.addEventListener('scroll', this.handleScroll)
     if (fireOnMount) this.handleUpdate()
   }
@@ -201,36 +202,28 @@ export default class Visibility extends Component {
     if (!isBrowser) return
 
     const { context } = this.props
+    context.removeEventListener('resize', this.handleScroll)
     context.removeEventListener('scroll', this.handleScroll)
   }
 
-  execute = (callback, name) => {
-    const { continuous, once } = this.props
+  fire(callback, name, reverse = false) {
+    const { once } = this.props
+    const callbackName = reverse ? `${name}Reverse` : name
+    const calculation = this.calculations[name]
 
+    if(calculation !== reverse && calculation !== this.oldCalculations[name]) this.execute(callback, callbackName)
+    if(!once) this.occuredCallbacks = _.without(this.occuredCallbacks, callbackName)
+  }
+
+  execute(callback, name) {
+    const { continuous } = this.props
     if (!callback) return
-    // Reverse callbacks aren't fired continuously
-    if (this.calculations[name] === false) return
 
-    // Always fire callback if continuous = true
-    if (continuous) {
-      callback(null, { ...this.props, calculations: this.calculations })
-      return
-    }
+    // Heads up! When `continuous` is true, callback will be fired always
+    if (!continuous && _.includes(this.occuredCallbacks, name)) return
 
-    // If once = true, fire callback only if it wasn't fired before
-    if (once) {
-      if (!_.includes(this.firedCallbacks, name)) {
-        this.firedCallbacks.push(name)
-        callback(null, { ...this.props, calculations: this.calculations })
-      }
-
-      return
-    }
-
-    // Fire callback only if the value changed
-    if (this.calculations[name] !== this.oldCalculations[name]) {
-      callback(null, { ...this.props, calculations: this.calculations })
-    }
+    callback(null, { ...this.props, calculations: this.calculations })
+    this.occuredCallbacks.push(name)
   }
 
   fireCallbacks() {
@@ -249,27 +242,27 @@ export default class Visibility extends Component {
       onOnScreen,
     } = this.props
     const callbacks = {
-      bottomPassed: onBottomPassed,
-      bottomVisible: onBottomVisible,
-      passing: onPassing,
-      offScreen: onOffScreen,
-      onScreen: onOnScreen,
+      // bottomPassed: onBottomPassed,
+      // bottomVisible: onBottomVisible,
+      // passing: onPassing,
+      // offScreen: onOffScreen,
+      // onScreen: onOnScreen,
       topPassed: onTopPassed,
-      topVisible: onTopVisible,
+      // topVisible: onTopVisible,
     }
     const reverse = {
-      bottomPassed: onBottomPassedReverse,
-      bottomVisible: onBottomVisibleReverse,
-      passing: onPassingReverse,
+      // bottomPassed: onBottomPassedReverse,
+      // bottomVisible: onBottomVisibleReverse,
+      // passing: onPassingReverse,
       topPassed: onTopPassedReverse,
-      topVisible: onTopVisibleReverse,
+      // topVisible: onTopVisibleReverse,
     }
 
     _.invoke(this.props, 'onUpdate', null, { ...this.props, calculations: this.calculations })
     this.fireOnPassed()
 
-    _.forEach(callbacks, (callback, name) => this.execute(callback, name))
-    _.forEach(reverse, (callback, name) => this.execute(callback, name))
+    _.forEach(reverse, (callback, name) => this.fire(callback, name, true))
+    _.forEach(callbacks, (callback, name) => this.fire(callback, name))
   }
 
   fireOnPassed = () => {
@@ -310,7 +303,7 @@ export default class Visibility extends Component {
 
     const topPassed = top < topOffset
     const bottomPassed = bottom < bottomOffset
-
+console.log(topPassed)
     const pixelsPassed = bottomPassed ? 0 : Math.max(top * -1, 0)
     const percentagePassed = pixelsPassed / height
 
@@ -322,6 +315,8 @@ export default class Visibility extends Component {
 
     const onScreen = (topVisible || topPassed) && !bottomPassed
     const offScreen = !onScreen
+
+    /* TODO: DIRECTION */
 
     this.oldCalculations = this.calculations
     this.calculations = {
